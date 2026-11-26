@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html><head>
+  <title>Login - LiveQuiz+</title>
+  <link rel="stylesheet" href="style.css">
+</head><body class="container">
+<div class="card">
+  <div class="header"><h1>LiveQuiz+</h1><p>Teacher & Student Portal</p></div>
+  <div class="form">
+    <div class="input-group" style="position:relative">
+      <input type="email" id="email" required pattern="^[a-zA-Z0-9._%+-]+@gmail\\.com$" title="Enter a valid Gmail address">
+      <label>Email Address</label>
+    </div>
+    <div class="input-group" style="position:relative">
+      <input type="password" id="password" required>
+      <label>Password</label>
+      <button type="button" onclick="togglePassword()" style="position:absolute; right:10px; top:10px; background:none; border:none; cursor:pointer; font-size:16px;">👁️</button>
+    </div>
+    <button class="btn" onclick="login()">Login</button>
+    <div class="link">No account? <a href="register.html">Register here</a></div>
+    <p id="msg" style="margin-top:15px; color:red; font-weight:600;"></p>
+  </div>
+</div>
+
+<script>
+async function login() {
+  const email = document.getElementById('email').value;
+  const password = document.getElementById('password').value;
+  const msg = document.getElementById('msg');
+  if (!email || !password) return msg.textContent = "Fill all fields!";
+
+  const gmailPattern = /^[a-zA-Z0-9._%+-]+@gmail\.com$/;
+  if (!gmailPattern.test(email.trim().toLowerCase())) {
+    return msg.textContent = "Enter a valid Gmail address";
+  }
+
+  try {
+    const res = await fetch('/api/auth/login', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password})
+    });
+    const data = await res.json();
+    if (data.success) {
+      // Save token globally and for this tab specifically. sessionStorage keeps
+      // the token only for this tab, so logging in as a different user in
+      // another tab won't overwrite this tab's session.
+      localStorage.setItem('token', data.token);
+      try { sessionStorage.setItem('token', data.token); } catch(e) {}
+      location.href = data.user.role === 'teacher' ? 'teacher-dashboard.html' : 'student-dashboard.html';
+    } else msg.textContent = data.error || "Wrong credentials";
+  } catch(e) { msg.textContent = "Server off!"; }
+}
+
+function togglePassword() {
+  const pwd = document.getElementById('password');
+  pwd.type = pwd.type === 'password' ? 'text' : 'password';
+}
+</script>
+</body></html>

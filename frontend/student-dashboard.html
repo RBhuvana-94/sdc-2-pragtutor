@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Student Dashboard - LiveQuiz+</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    .student-grid { 
+      display:grid; 
+      grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); 
+      gap:28px; 
+      max-width:1400px; 
+      margin:40px auto; 
+      padding:0 20px; 
+    }
+    .card-big { 
+      background:white; 
+      border-radius:32px; 
+      padding:40px 30px; 
+      text-align:center; 
+      box-shadow:0 20px 50px rgba(0,0,0,0.08); 
+      transition:0.3s;
+    }
+    .card-big:hover { transform:translateY(-10px); }
+    .join-box { 
+      background:linear-gradient(135deg,#10b981,#059669); 
+      color:white; 
+    }
+    .join-box input { 
+      background:white; 
+      border:none; 
+      border-radius:24px; 
+      padding:20px; 
+      font-size:32px; 
+      font-weight:bold; 
+      text-align:center; 
+      letter-spacing:10px; 
+      width:100%; 
+      margin:20px 0; 
+    }
+    .join-box button { 
+      background:white; 
+      color:#10b981; 
+      border:none; 
+      border-radius:50px; 
+      padding:16px 50px; 
+      font-size:20px; 
+      font-weight:bold; 
+      cursor:pointer; 
+    }
+    .btn-purple { 
+      background:#8b46ff; 
+      color:white; 
+      border:none; 
+      border-radius:50px; 
+      padding:14px 40px; 
+      font-weight:bold; 
+      cursor:pointer; 
+      margin-top:15px; 
+    }
+    .rank-num { 
+      font-size:80px; 
+      font-weight:900; 
+      color:#8b46ff; 
+      margin:10px 0; 
+    }
+    .points-num { 
+      font-size:80px; 
+      font-weight:900; 
+      color:#10b981; 
+      margin:10px 0; 
+    }
+    .emoji { 
+      font-size:60px; 
+      margin:8px; 
+    }
+  </style>
+</head>
+<body class="dashboard">
+
+  <!-- Menu Toggle Button -->
+  <button class="menu-toggle" onclick="toggleSidebar()">
+    <i class="fas fa-bars"></i>
+  </button>
+
+  <!-- Sidebar (Hidden by default on mobile, visible on large screens) -->
+  <div class="sidebar" id="sidebar">
+    <div class="logo">LiveQuiz+</div>
+    <div class="nav">
+      <a href="student-dashboard.html" class="active"><i class="fas fa-home"></i> Home</a>
+      <a href="leaderboard.html"><i class="fas fa-trophy"></i> Leaderboard</a>
+      <a href="history.html"><i class="fas fa-history"></i> History</a>
+      <a href="#" onclick="logout()" style="color:#ff6b6b;"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="main-area" id="mainArea">
+    <h1 style="text-align:center; font-size:48px; background:linear-gradient(135deg,#8b46ff,#5e42ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin:40px 0;">
+      Welcome Back, <span id="studentName">Student</span>!
+    </h1>
+
+    <div class="student-grid" id="dashboardGrid">
+      <!-- Content loaded by JS -->
+      <div class="card-big join-box">
+        <h2 style="font-size:36px;">Join Live Quiz</h2>
+        <input type="text" id="quizCode" placeholder="UUJ7OH" maxlength="6">
+        <button onclick="joinQuiz()">JOIN NOW</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+let freezeRefresh = false;
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const mainArea = document.getElementById('mainArea');
+  
+  sidebar.classList.toggle('open');
+  mainArea.classList.toggle('sidebar-open');
+}
+
+function logout() {
+  localStorage.clear();
+  location.href = 'index.html';
+}
+
+async function loadDashboard() {
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+  if (!token) return logout();
+
+  try {
+    const existingInput = document.getElementById('quizCode');
+    const inputFocused = existingInput && document.activeElement === existingInput;
+    const savedValue = existingInput ? existingInput.value : '';
+
+    if (inputFocused) {
+      return; 
+    }
+
+    const userRes = await fetch('/api/auth/me', { 
+      headers: { Authorization: 'Bearer ' + token } 
+    });
+    const user = await userRes.json();
+    if (!user || user.role !== 'student') return logout();
+
+    document.getElementById('studentName').textContent = user.name.split(' ')[0] || 'Student';
+
+    // Fetch live quizzes (only active ones)
+    const liveRes = await fetch('/api/quiz/live');
+    const liveQuizzes = (await liveRes.json()).filter(q => q); // Filter out any null/undefined
+
+    // Fetch student stats
+    let stats = { rank: 1, points: 0, badges: [], lastQuiz: { title: "No quiz yet" } };
+    try {
+      const statsRes = await fetch('/api/student/stats', { 
+        headers: { Authorization: 'Bearer ' + token } 
+      });
+      stats = await statsRes.json();
+    } catch(e) { console.log("Stats not available yet"); }
+
+    // Render dashboard
+    document.getElementById('dashboardGrid').innerHTML = `
+      <div class="card-big join-box">
+        <h2 style="font-size:36px;">Join Live Quiz</h2>
+        <input type="text" id="quizCode" placeholder="Enter Code" maxlength="6" style="letter-spacing:8px;">
+        <button onclick="joinQuiz()">JOIN NOW</button>
+      </div>
+
+      ${liveQuizzes.length > 0 ? liveQuizzes.map(q => `
+        <div class="card-big" id="quiz-${q.code}">
+          <div class="emoji">⚡</div>
+          <h3>${q.title}</h3>
+          <p>by ${q.teacher}</p>
+          <p><strong>${q.players} players opened the quiz</strong></p>
+          <button class="btn-purple" onclick="joinQuiz('${q.code}')" style="width:100%; margin-top:15px;">
+            Join Live
+          </button>
+        </div>
+      `).join('') : ''}
+
+      <div class="card-big">
+        <div class="emoji">Crown</div>
+        <h3>Your Rank</h3>
+        <div class="rank-num">#${stats.rank || '–'}</div>
+        <p>Keep climbing!</p>
+      </div>
+
+      <div class="card-big">
+        <div class="emoji">Star</div>
+        <h3>Total Points</h3>
+        <div class="points-num">${stats.points || 0}</div>
+      </div>
+
+      <div class="card-big" onclick="location.href='history.html'" style="cursor:pointer;">
+        <div class="emoji">📚</div>
+        <h3 style="color:#8b46ff;">Recent Quizzes</h3>
+        <p style="font-size:18px;">View your quiz history</p>
+        <p style="font-size:14px; color:#666; margin-top:10px;">Click to see all</p>
+      </div>
+    `;
+
+    const newInput = document.getElementById('quizCode');
+    if (newInput) {
+      newInput.value = savedValue || '';
+      if (savedValue) {
+        newInput.setSelectionRange(savedValue.length, savedValue.length);
+      }
+      newInput.addEventListener('focus', () => { freezeRefresh = true; });
+      newInput.addEventListener('blur', () => { freezeRefresh = false; });
+    }
+
+  } catch (err) {
+    console.error(err);
+    alert("Session expired. Logging out...");
+    logout();
+  }
+}
+
+async function joinQuiz(code = null) {
+  if (!code) {
+    code = document.getElementById('quizCode').value.trim().toUpperCase();
+  }
+  if (!code || code.length < 4) return alert("Enter a valid quiz code!");
+
+  try {
+    const res = await fetch('/api/join/quiz', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + localStorage.getItem('token')
+      },
+      body: JSON.stringify({ code })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      confetti({ particleCount: 200, spread: 70, origin: { y: 0.6 } });
+      setTimeout(() => {
+        location.href = `student-quiz.html?code=${code}`;
+      }, 1000);
+    } else {
+      alert(data.error || "Quiz not found or closed");
+    }
+  } catch(e) {
+    alert("Failed to join quiz");
+  }
+}
+
+// Load dashboard on page load
+loadDashboard();
+
+// Listen for quiz status changes
+let socket;
+try {
+  socket = io();
+  socket.on('quizStatusChanged', (data) => {
+    // Remove ended quiz from display
+    const quizCard = document.getElementById(`quiz-${data.code}`);
+    if (quizCard && !data.active) {
+      quizCard.remove();
+    }
+    // Refresh live quizzes to update list
+    setTimeout(() => { if (!freezeRefresh) loadDashboard(); }, 500);
+  });
+  
+  socket.on('newLiveQuiz', () => loadDashboard());
+} catch (e) {
+  console.log('Socket.io not available');
+}
+
+// Refresh live quizzes periodically
+setInterval(() => {
+  if (!freezeRefresh) loadDashboard();
+}, 5000);
+</script>
+</body>
+</html>

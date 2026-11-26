@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leaderboard - LiveQuiz+</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    .leaderboard-container {
+      max-width: 1000px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    .leaderboard-card {
+      background: white;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+    }
+    .leaderboard-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px;
+      border-radius: 16px;
+      margin: 10px 0;
+      background: #f8f9ff;
+      transition: 0.3s;
+    }
+    .leaderboard-item:hover {
+      background: #f0f2ff;
+      transform: translateX(10px);
+    }
+    .leaderboard-item.top-3 {
+      background: linear-gradient(135deg, #8b46ff, #5e42ff);
+      color: white;
+    }
+    .rank {
+      font-size: 32px;
+      font-weight: bold;
+      color: #8b46ff;
+      min-width: 60px;
+    }
+    .leaderboard-item.top-3 .rank {
+      color: white;
+    }
+    .name {
+      flex: 1;
+      font-size: 20px;
+      font-weight: 600;
+      margin-left: 20px;
+    }
+    .points {
+      font-size: 24px;
+      font-weight: bold;
+      color: #10b981;
+    }
+    .leaderboard-item.top-3 .points {
+      color: white;
+    }
+    .trophy-icon {
+      font-size: 40px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body class="dashboard">
+  <button class="menu-toggle" onclick="toggleSidebar()">
+    <i class="fas fa-bars"></i>
+  </button>
+
+  <div class="sidebar" id="sidebar">
+    <div class="logo">LiveQuiz+</div>
+    <div class="nav">
+      <a href="#" id="dashboardLink"><i class="fas fa-home"></i> Dashboard</a>
+      <a href="quiz-creator.html" id="createLink" style="display:none;"><i class="fas fa-plus-circle"></i> Create Quiz</a>
+      <a href="leaderboard.html" class="active"><i class="fas fa-trophy"></i> Leaderboard</a>
+      <a href="history.html"><i class="fas fa-history"></i> Quiz History</a>
+      <a href="#" onclick="logout()" style="color:#ff6b6b;"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </div>
+  </div>
+
+  <div class="main-area" id="mainArea">
+    <div class="leaderboard-container">
+      <h1 style="font-size:48px; background:linear-gradient(135deg,#8b46ff,#5e42ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; text-align:center; margin-bottom:40px;">
+        Global Leaderboard
+      </h1>
+
+      <div class="leaderboard-card">
+        <div id="leaderboardContent">
+          <p style="text-align:center; color:#666;">Loading leaderboard...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const mainArea = document.getElementById('mainArea');
+      sidebar.classList.toggle('open');
+      mainArea.classList.toggle('sidebar-open');
+    }
+
+    function logout() {
+      localStorage.clear();
+      location.href = 'index.html';
+    }
+
+    async function loadLeaderboard() {
+      try {
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        if (!token) {
+          logout();
+          return;
+        }
+
+        const userRes = await fetch('/api/auth/me', {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        const user = await userRes.json();
+        
+        // Update sidebar based on role
+        if (user.role === 'teacher') {
+          document.getElementById('dashboardLink').href = 'teacher-dashboard.html';
+          document.getElementById('createLink').style.display = 'block';
+        } else {
+          document.getElementById('dashboardLink').href = 'student-dashboard.html';
+        }
+        
+        let endpoint = '/api/student/leaderboard';
+        if (user.role === 'teacher') {
+          endpoint = '/api/teacher/leaderboard';
+        }
+
+        const res = await fetch(endpoint, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        const leaderboard = await res.json();
+
+        const content = document.getElementById('leaderboardContent');
+        if (leaderboard.length === 0) {
+          content.innerHTML = '<p style="text-align:center; color:#666;">No leaderboard data yet</p>';
+          return;
+        }
+
+        content.innerHTML = leaderboard.map((entry, index) => {
+          const isTop3 = index < 3;
+          const trophy = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : '';
+          return `
+            <div class="leaderboard-item ${isTop3 ? 'top-3' : ''}">
+              <div style="display:flex; align-items:center;">
+                <span class="rank">${trophy} #${index + 1}</span>
+                <span class="name">${entry.name}</span>
+              </div>
+              <span class="points">${entry.points || 0} pts</span>
+            </div>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error('Error loading leaderboard:', error);
+        document.getElementById('leaderboardContent').innerHTML = 
+          '<p style="text-align:center; color:#ef4444;">Error loading leaderboard</p>';
+      }
+    }
+
+    loadLeaderboard();
+  </script>
+</body>
+</html>
+

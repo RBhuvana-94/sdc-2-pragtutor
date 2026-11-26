@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quiz History - LiveQuiz+</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    .history-container {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    .quiz-card {
+      background: white;
+      border-radius: 24px;
+      padding: 30px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+    .quiz-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+    }
+    .quiz-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .quiz-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #333;
+    }
+    .quiz-code {
+      background: #8b46ff;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 12px;
+      font-weight: bold;
+      letter-spacing: 2px;
+    }
+    .quiz-info {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+    .info-item {
+      background: #f8f9ff;
+      padding: 15px;
+      border-radius: 12px;
+    }
+    .info-label {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .info-value {
+      font-size: 20px;
+      font-weight: bold;
+      color: #333;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .status-active {
+      background: #10b981;
+      color: white;
+    }
+    .status-ended {
+      background: #ef4444;
+      color: white;
+    }
+    .participants-list {
+      margin-top: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    .participant-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px;
+      background: #f8f9ff;
+      border-radius: 8px;
+      margin: 8px 0;
+    }
+  </style>
+</head>
+<body class="dashboard">
+  <button class="menu-toggle" onclick="toggleSidebar()">
+    <i class="fas fa-bars"></i>
+  </button>
+
+  <div class="sidebar" id="sidebar">
+    <div class="logo">LiveQuiz+</div>
+    <div class="nav">
+      <a href="#" id="dashboardLink"><i class="fas fa-home"></i> Dashboard</a>
+      <a href="quiz-creator.html" id="createLink" style="display:none;"><i class="fas fa-plus-circle"></i> Create Quiz</a>
+      <a href="leaderboard.html"><i class="fas fa-trophy"></i> Leaderboard</a>
+      <a href="history.html" class="active"><i class="fas fa-history"></i> Quiz History</a>
+      <a href="#" onclick="logout()" style="color:#ff6b6b;"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </div>
+  </div>
+
+  <div class="main-area" id="mainArea">
+    <div class="history-container">
+      <h1 style="font-size:48px; background:linear-gradient(135deg,#8b46ff,#5e42ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; text-align:center; margin-bottom:40px;">
+        Recent Quizzes
+      </h1>
+
+      <div id="quizzesList">
+        <p style="text-align:center; color:#666;">Loading quizzes...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toggleSidebar() {
+      const sidebar = document.getElementById('sidebar');
+      const mainArea = document.getElementById('mainArea');
+      sidebar.classList.toggle('open');
+      mainArea.classList.toggle('sidebar-open');
+    }
+
+    function logout() {
+      localStorage.clear();
+      location.href = 'index.html';
+    }
+
+    async function loadQuizzes() {
+      try {
+        const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+        if (!token) {
+          logout();
+          return;
+        }
+
+        const userRes = await fetch('/api/auth/me', {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        const user = await userRes.json();
+        
+        // Update sidebar based on role
+        if (user.role === 'teacher') {
+          document.getElementById('dashboardLink').href = 'teacher-dashboard.html';
+          document.getElementById('createLink').style.display = 'block';
+        } else {
+          document.getElementById('dashboardLink').href = 'student-dashboard.html';
+        }
+        
+        let endpoint = '/api/student/recentQuizzes';
+        if (user.role === 'teacher') {
+          endpoint = '/api/teacher/recentQuizzes';
+        }
+
+        const res = await fetch(endpoint, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        const quizzes = await res.json();
+
+        const list = document.getElementById('quizzesList');
+        if (quizzes.length === 0) {
+          list.innerHTML = '<p style="text-align:center; color:#666;">No quizzes yet</p>';
+          return;
+        }
+
+        list.innerHTML = quizzes.map(quiz => {
+          const date = new Date(quiz.createdAt).toLocaleDateString();
+          const status = quiz.active ? 'active' : 'ended';
+          const leaderboard = quiz.leaderboard || [];
+          const myEntry = user.role === 'student'
+            ? (leaderboard.find(entry => entry.name === user.name) || { score: quiz.myScore || 0 })
+            : null;
+          
+          let participantsHtml = '';
+          if (leaderboard.length > 0) {
+            participantsHtml = `
+              <div class="participants-list">
+                <h3 style="margin-bottom:15px; color:#333;">Participants & Scores:</h3>
+                ${leaderboard.map((entry, idx) => `
+                  <div class="participant-item">
+                    <span><strong>#${idx + 1}</strong> ${entry.name}</span>
+                    <span style="color:#10b981; font-weight:bold;">${entry.score} points</span>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          }
+
+          return `
+            <div class="quiz-card" onclick="${quiz.active && user.role === 'teacher' ? `location.href='teacher-quiz.html?code=${quiz.code}'` : 'void(0)'}">
+              <div class="quiz-header">
+                <div>
+                  <div class="quiz-title">${quiz.title}</div>
+                  <div style="color:#666; margin-top:5px;">Created: ${date}</div>
+                </div>
+                <div>
+                  <span class="quiz-code">${quiz.code}</span>
+                  <span class="status-badge status-${status}">${status === 'active' ? 'LIVE' : 'ENDED'}</span>
+                </div>
+              </div>
+              <div class="quiz-info">
+                <div class="info-item">
+                  <div class="info-label">Questions</div>
+                  <div class="info-value">${quiz.questions?.length || 0}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Participants</div>
+                  <div class="info-value">${quiz.participants?.length || 0}</div>
+                </div>
+                <div class="info-item">
+                  <div class="info-label">Status</div>
+                  <div class="info-value">${status === 'active' ? 'Active' : 'Ended'}</div>
+                </div>
+              ${myEntry ? `
+                <div class="info-item">
+                  <div class="info-label">Your Points</div>
+                  <div class="info-value">${myEntry.score}</div>
+                </div>` : ''}
+              </div>
+              ${participantsHtml}
+            </div>
+          `;
+        }).join('');
+      } catch (error) {
+        console.error('Error loading quizzes:', error);
+        document.getElementById('quizzesList').innerHTML = 
+          '<p style="text-align:center; color:#ef4444;">Error loading quizzes</p>';
+      }
+    }
+
+    loadQuizzes();
+  </script>
+</body>
+</html>
+

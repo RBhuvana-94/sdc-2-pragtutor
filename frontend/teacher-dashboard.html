@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Teacher Dashboard - LiveQuiz+</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    .dashboard { min-height:100vh; background:#f8f9ff; position:relative; }
+    
+    /* Sidebar - Default CLOSED */
+    .sidebar {
+      position:fixed; left:0; top:0; width:300px; height:100vh; background:#1e1b4b; 
+      padding:30px 20px; transition:0.4s ease; z-index:1000; box-shadow:8px 0 30px rgba(0,0,0,0.15);
+      transform:translateX(-300px);
+    }
+    .sidebar.open { transform:translateX(0); }
+
+    /* Menu Button */
+    .menu-toggle {
+      position:fixed; top:20px; left:20px; width:55px; height:55px; background:#8b46ff; color:white;
+      border:none; border-radius:50%; font-size:24px; cursor:pointer; z-index:1001;
+      box-shadow:0 10px 30px rgba(139,70,255,0.4); transition:0.3s;
+    }
+
+    /* Main Content - Full width by default */
+    .main-area {
+      margin-left:0; padding:40px; transition:0.4s ease; min-height:100vh;
+    }
+    .main-area.sidebar-open { margin-left:300px; }
+
+    /* Perfectly Centered 2 Cards */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 40px;
+      max-width: 900px;
+      margin: 60px auto 0;
+      justify-content: center;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; padding: 0 20px; }
+    }
+
+    .card {
+      background:white; border-radius:28px; padding:60px 30px; text-align:center;
+      box-shadow:0 20px 50px rgba(0,0,0,0.1); transition:all 0.4s ease; cursor:pointer;
+    }
+    .card:hover {
+      transform:translateY(-20px);
+      box-shadow:0 35px 80px rgba(139,70,255,0.25);
+    }
+    .card i {
+      font-size:70px; margin-bottom:25px;
+      background:linear-gradient(135deg,#8b46ff,#5e42ff);
+      -webkit-background-clip:text; background-clip:text;
+      -webkit-text-fill-color:transparent; color:transparent;
+      display:inline-block;
+    }
+    .card h3 { font-size:26px; font-weight:700; color:#333; }
+  </style>
+</head>
+<body class="dashboard">
+
+<button class="menu-toggle" onclick="toggleSidebar()">
+  <i class="fas fa-bars"></i>
+</button>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+  <div style="color:white; font-size:28px; font-weight:700; text-align:center; margin-bottom:50px;">LiveQuiz+</div>
+  <div style="display:flex; flex-direction:column; gap:10px;">
+    <a href="teacher-dashboard.html" style="color:#c0c0ff; padding:18px 22px; border-radius:16px; text-decoration:none; display:flex; align-items:center; gap:15px; font-size:17px; transition:0.3s;" 
+       onmouseover="this.style.background='rgba(139,70,255,0.2)'; this.style.color='#fff';" 
+       onmouseout="this.style.background=''; this.style.color='#c0c0ff';">
+      <i class="fas fa-home"></i> Dashboard
+    </a>
+    <a href="quiz-creator.html" style="color:#c0c0ff; padding:18px 22px; border-radius:16px; text-decoration:none; display:flex; align-items:center; gap:15px; font-size:17px; transition:0.3s;" 
+       onmouseover="this.style.background='rgba(139,70,255,0.2)'; this.style.color='#fff';" 
+       onmouseout="this.style.background=''; this.style.color='#c0c0ff';">
+      <i class="fas fa-plus-circle"></i> Create Quiz
+    </a>
+    <a href="leaderboard.html" style="color:#c0c0ff; padding:18px 22px; border-radius:16px; text-decoration:none; display:flex; align-items:center; gap:15px; font-size:17px; transition:0.3s;" 
+       onmouseover="this.style.background='rgba(139,70,255,0.2)'; this.style.color='#fff';" 
+       onmouseout="this.style.background=''; this.style.color='#c0c0ff';">
+      <i class="fas fa-trophy"></i> Leaderboard
+    </a>
+    <a href="#" id="monitoringBtn" style="color:#c0c0ff; padding:18px 22px; border-radius:16px; text-decoration:none; display:flex; align-items:center; gap:15px; font-size:17px; transition:0.3s;" 
+       onmouseover="this.style.background='rgba(139,70,255,0.2)'; this.style.color='#fff';" 
+       onmouseout="this.style.background=''; this.style.color='#c0c0ff';" onclick="openMonitoring()">
+      <i class="fas fa-chart-line"></i> Monitoring
+    </a>
+    <a href="history.html" style="color:#c0c0ff; padding:18px 22px; border-radius:16px; text-decoration:none; display:flex; align-items:center; gap:15px; font-size:17px; transition:0.3s;" 
+       onmouseover="this.style.background='rgba(139,70,255,0.2)'; this.style.color='#fff';" 
+       onmouseout="this.style.background=''; this.style.color='#c0c0ff';">
+      <i class="fas fa-history"></i> Quiz History
+    </a>
+    <a href="#" onclick="localStorage.clear();location.href='index.html'" style="color:#ff6b6b; padding:18px 22px; border-radius:16px; text-decoration:none; display:flex; align-items:center; gap:15px; font-size:17px; transition:0.3s;" 
+       onmouseover="this.style.background='rgba(239,68,68,0.2)'; this.style.color='#fff';" 
+       onmouseout="this.style.background=''; this.style.color='#ff6b6b';">
+      <i class="fas fa-sign-out-alt"></i> Logout
+    </a>
+  </div>
+</div>
+
+<!-- Main Content -->
+<div class="main-area" id="mainArea">
+  <h1 style="text-align:center; font-size:48px; background:linear-gradient(135deg,#8b46ff,#5e42ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-bottom:20px;">
+    Teacher Dashboard
+  </h1>
+  <p style="text-align:center; color:#666; font-size:20px; margin-bottom:50px;">Welcome back, Master!</p>
+
+  <div class="grid">
+    <div class="card" onclick="location.href='quiz-creator.html'">
+      <i class="fas fa-plus-circle"></i>
+      <h3>Create Quiz</h3>
+    </div>
+    <div class="card" onclick="location.href='history.html'">
+      <i class="fas fa-history"></i>
+      <h3>Recent Quizzes</h3>
+    </div>
+  </div>
+
+  <div id="activeQuizzesSection" style="max-width:1200px; margin:60px auto; padding:0 20px;">
+    <h2 style="font-size:32px; color:#333; margin-bottom:30px; text-align:center;">Active Quizzes</h2>
+    <div id="activeQuizzesList" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:20px;">
+      <p style="text-align:center; color:#666; grid-column:1/-1;">Loading active quizzes...</p>
+    </div>
+  </div>
+</div>
+<!-- Monitoring Panel (hidden by default) -->
+<div id="monitoringPanel" style="position:fixed; right:20px; top:80px; width:560px; max-height:75vh; overflow:auto; background:white; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,0.2); padding:20px; display:none; z-index:1500;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+    <h3 style="margin:0;">Monitoring</h3>
+    <div>
+      <button onclick="refreshMonitoring()" style="margin-right:8px;">Refresh</button>
+      <button onclick="closeMonitoring()">Close</button>
+    </div>
+  </div>
+  <div id="monitoringContent">
+    <p style="color:#666;">Loading monitoring data...</p>
+  </div>
+</div>
+<a href="#" onclick="logout()" style="margin-top:auto; color:#ff6b6b;">
+  <i class="fas fa-sign-out-alt"></i> Logout
+</a>
+<script>
+function openMonitoring() {
+    // This will open mentoring.html in the same tab
+    window.location.href = 'mentoring.html';
+}
+</script>
+
+<script>
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const mainArea = document.getElementById('mainArea');
+  
+  sidebar.classList.toggle('open');
+  mainArea.classList.toggle('sidebar-open');
+}
+
+async function loadTeacherDashboard() {
+  const token = sessionStorage.getItem('token') || localStorage.getItem('token');
+  if (!token) return logout();
+
+  try {
+    const me = await fetch('/api/auth/me', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+    
+    const dashboard = await fetch('/api/teacher/dashboard', { headers: { Authorization: 'Bearer ' + token } }).then(r => r.json());
+
+    // Load active quizzes for this teacher (separate try/catch so a failure
+    // here doesn't break the rest of the dashboard rendering)
+    const activeList = document.getElementById('activeQuizzesList');
+    try {
+      const activeRes = await fetch('/api/teacher/activeQuizzes', { 
+        headers: { Authorization: 'Bearer ' + token } 
+      });
+
+      if (!activeRes.ok) {
+        activeList.innerHTML = '<p style="text-align:center; color:#666; grid-column:1/-1;">Unable to load active quizzes</p>';
+      } else {
+        const activeQuizzes = await activeRes.json();
+        if (activeQuizzes.length === 0) {
+          activeList.innerHTML = '<p style="text-align:center; color:#666; grid-column:1/-1;">No active quizzes. Create one to get started!</p>';
+        } else {
+          activeList.innerHTML = activeQuizzes.map(q => `
+            <div style="background:white; border-radius:24px; padding:30px; box-shadow:0 10px 30px rgba(0,0,0,0.1); cursor:pointer; transition:0.3s;" 
+                 onclick="location.href='teacher-quiz.html?code=${q.code}'"
+                 onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 15px 40px rgba(0,0,0,0.15)';"
+                 onmouseout="this.style.transform=''; this.style.boxShadow='0 10px 30px rgba(0,0,0,0.1)';">
+              <div style="font-size:48px; margin-bottom:15px;">⚡</div>
+              <h3 style="font-size:24px; color:#333; margin-bottom:10px;">${q.title}</h3>
+              <p style="color:#666; margin-bottom:15px;">Code: <strong style="letter-spacing:4px; color:#8b46ff;">${q.code}</strong></p>
+              <button style="background:#8b46ff; color:white; border:none; padding:12px 30px; border-radius:12px; margin-top:15px; cursor:pointer; font-weight:bold;">
+                Open Quiz
+              </button>
+            </div>
+          `).join('');
+        }
+      }
+    } catch (err) {
+      console.error('Error loading active quizzes:', err);
+      activeList.innerHTML = '<p style="text-align:center; color:#666; grid-column:1/-1;">Unable to load active quizzes</p>';
+    }
+    
+  } catch (err) { 
+    console.log("Demo mode", err);
+    document.getElementById('activeQuizzesList').innerHTML = '<p style="text-align:center; color:#666; grid-column:1/-1;">Unable to load active quizzes</p>';
+  }
+}
+
+function logout() {
+  localStorage.clear();
+  location.href = 'index.html';
+}
+
+loadTeacherDashboard();
+
+// Handle bfcache/back-forward navigation: always refresh dashboard when
+// the page is shown again (pageshow fires even for bfcache restores).
+window.addEventListener('pageshow', (event) => {
+  try {
+    loadTeacherDashboard();
+  } catch (e) {
+    console.error('pageshow reload failed', e);
+  }
+});
+
+try {
+  const socket = io();
+  socket.on('newLiveQuiz', () => loadTeacherDashboard());
+  socket.on('quizStatusChanged', () => loadTeacherDashboard());
+} catch (error) {
+  console.log('Socket connection unavailable', error);
+}
+</script>
+<script>
+function openMonitoring() {
+    // Navigate to monitoring page
+    window.location.href = 'monitoring.html'; 
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Live Quiz - LiveQuiz+</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    .quiz-container {
+      max-width: 900px;
+      margin: 40px auto;
+      padding: 20px;
+    }
+    .question-card {
+      background: white;
+      border-radius: 24px;
+      padding: 40px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.1);
+      margin-bottom: 30px;
+    }
+    .question-title {
+      font-size: 32px;
+      color: #333;
+      margin-bottom: 30px;
+      font-weight: 600;
+    }
+    .options-grid {
+      display: grid;
+      gap: 20px;
+      margin: 30px 0;
+    }
+    .option-btn {
+      background: #f8f9ff;
+      border: 3px solid #e0e0e0;
+      border-radius: 16px;
+      padding: 20px 30px;
+      font-size: 20px;
+      cursor: pointer;
+      transition: all 0.3s;
+      text-align: left;
+    }
+    .option-btn:hover {
+      border-color: #8b46ff;
+      background: #f0f2ff;
+      transform: translateX(10px);
+    }
+    .option-btn.selected {
+      background: #8b46ff;
+      color: white;
+      border-color: #8b46ff;
+    }
+    .question-image {
+      max-width: 100%;
+      border-radius: 16px;
+      margin: 20px 0;
+    }
+    .timer {
+      font-size: 48px;
+      font-weight: bold;
+      color: #8b46ff;
+      text-align: center;
+      margin: 20px 0;
+    }
+    .waiting {
+      text-align: center;
+      padding: 60px 20px;
+      color: #666;
+    }
+    .waiting i {
+      font-size: 80px;
+      color: #8b46ff;
+      margin-bottom: 20px;
+    }
+    .score-display {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      padding: 30px;
+      border-radius: 20px;
+      text-align: center;
+      font-size: 28px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body class="dashboard">
+  <div class="quiz-container">
+    <div id="waiting" class="waiting">
+      <i class="fas fa-spinner fa-spin"></i>
+      <h2>Waiting for quiz to start...</h2>
+    </div>
+
+    <div id="quizContent" style="display:none;">
+      <h1 style="text-align:center; margin-bottom:30px; color:#333;" id="quizTitle">Quiz</h1>
+      <div id="questionsContainer"></div>
+      <div style="text-align:center; margin-top:30px;">
+        <button id="submitAllBtn" onclick="submitAllAnswers()" style="background:#8b46ff; color:white; border:none; padding:16px 50px; border-radius:16px; font-size:20px; cursor:pointer;">
+          Submit All Answers
+        </button>
+      </div>
+    </div>
+
+    <div id="alreadySubmitted" style="display:none;">
+      <div class="score-display">
+        <h2>You Have Already Submitted</h2>
+        <p>Your Score: <span id="submittedScore">0</span></p>
+        <p style="font-size:18px; margin-top:20px;">You cannot submit again.</p>
+      </div>
+    </div>
+
+    <div id="results" style="display:none;">
+      <div class="score-display">
+        <h2>Quiz Completed!</h2>
+        <p>Your Score: <span id="finalScore">0</span></p>
+      </div>
+      <div id="leaderboard" style="margin-top:30px;"></div>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const quizCode = urlParams.get('code');
+    let allQuestions = [];
+    let answers = {}; // { questionIndex: selectedAnswer }
+    let hasSubmitted = false;
+    let socket = null;
+    const authToken = sessionStorage.getItem('token') || localStorage.getItem('token');
+    let currentUser = null;
+
+    // Initialize Socket.IO connection but do not auto connect yet.
+    // We'll connect and join the quiz room only after we confirm via REST
+    // whether the student has already submitted (prevents race conditions).
+    console.log('🔌 Initializing WebSocket (will connect after REST checks)...');
+    socket = io({
+      autoConnect: false,
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
+
+    // Connection event handlers
+    let joinedRoom = false;
+    socket.on('connect', () => {
+      console.log('✅ WebSocket connected! Socket ID:', socket.id);
+      // Only join room when we've explicitly asked to (see window.load logic)
+      if (joinedRoom) {
+        console.log('📥 Re-joining quiz room after reconnect:', quizCode);
+        socket.emit('joinQuizRoom', { code: quizCode, token: authToken });
+      }
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('❌ WebSocket connection error:', error);
+      console.log('⚠️ Will use polling fallback');
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.warn('⚠️ WebSocket disconnected:', reason);
+    });
+
+    socket.on('reconnect', (attemptNumber) => {
+      console.log('✅ WebSocket reconnected after', attemptNumber, 'attempts');
+      // Re-emit join only if we previously joined
+      if (joinedRoom) socket.emit('joinQuizRoom', { code: quizCode, token: authToken });
+    });
+
+    // Ensure we leave the quiz room when the student leaves the page
+    window.addEventListener('beforeunload', () => {
+      try {
+        if (socket && joinedRoom) {
+          // Tell server we're leaving so it can update live participant lists
+          socket.emit('leaveQuizRoom', { code: quizCode, token: authToken });
+          // Disconnect immediately to ensure server-side 'disconnect' or
+          // explicit leave is handled quickly.
+          socket.disconnect();
+        }
+      } catch (e) {
+        // best-effort
+      }
+    });
+
+    socket.on('roomJoined', (data) => {
+      console.log('✅ Successfully joined room:', data.code);
+    });
+
+    // Listen for quiz started with all questions
+    socket.on('quizStarted', (data) => {
+      console.log('📨 Quiz started with all questions:', data);
+      // If we've already submitted, ignore any quiz start payloads to avoid
+      // showing questions again (race between socket events and REST checks).
+      if (hasSubmitted) {
+        console.log('⚠️ Ignoring quizStarted because user already submitted');
+        return;
+      }
+      if (data.questions && data.questions.length > 0) {
+        allQuestions = data.questions;
+        document.getElementById('quizTitle').textContent = data.title || 'Quiz';
+        displayAllQuestions();
+      }
+    });
+
+    // Listen for quiz data (when joining)
+    socket.on('quizData', (data) => {
+      console.log('📥 Received quiz data:', data);
+      // If the server marks us as already submitted (or we know locally), do not
+      // display the questions again. This avoids a race where quiz data arrives
+      // before the server's alreadySubmitted event or before our REST check.
+      if (hasSubmitted || data.hasSubmitted) {
+        console.log('⚠️ Ignoring quizData because user already submitted');
+        // If server sent a hasSubmitted flag include it in UI
+        if (data.hasSubmitted && data.score !== undefined) {
+          hasSubmitted = true;
+          document.getElementById('waiting').style.display = 'none';
+          document.getElementById('quizContent').style.display = 'none';
+          document.getElementById('alreadySubmitted').style.display = 'block';
+          document.getElementById('submittedScore').textContent = data.score || 0;
+        }
+        return;
+      }
+      if (data.questions && data.questions.length > 0) {
+        allQuestions = data.questions;
+        document.getElementById('quizTitle').textContent = data.title || 'Quiz';
+        displayAllQuestions();
+      }
+    });
+
+    // Listen for already submitted state
+    socket.on('alreadySubmitted', (data) => {
+      console.log('⚠️ Already submitted:', data);
+      hasSubmitted = true;
+      document.getElementById('waiting').style.display = 'none';
+      document.getElementById('quizContent').style.display = 'none';
+      document.getElementById('alreadySubmitted').style.display = 'block';
+      document.getElementById('submittedScore').textContent = data.score || 0;
+    });
+
+    // Listen for quiz end
+    socket.on('quizEnded', () => {
+      showResults();
+    });
+
+    // Display all questions at once
+    function displayAllQuestions() {
+      // Double-check with server that the student hasn't submitted (defense-in-depth
+      // against races where socket events or navigation briefly show questions).
+      (async () => {
+        try {
+          const token = authToken;
+          const res = await fetch(`/api/quiz/${quizCode}/data`, {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          if (res.ok) {
+            const quizData = await res.json();
+            if (quizData.hasSubmitted) {
+              hasSubmitted = true;
+              document.getElementById('waiting').style.display = 'none';
+              document.getElementById('quizContent').style.display = 'none';
+              document.getElementById('alreadySubmitted').style.display = 'block';
+              document.getElementById('submittedScore').textContent = quizData.myScore || 0;
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn('Could not re-validate submission status', e);
+        }
+
+        // If not submitted, continue to render below
+        _renderQuestions();
+      })();
+
+      // Internal render function executed after validation
+      function _renderQuestions() {
+        if (allQuestions.length === 0) {
+          console.error('❌ No questions to display');
+          return;
+        }
+
+        document.getElementById('waiting').style.display = 'none';
+        document.getElementById('quizContent').style.display = 'block';
+        document.getElementById('results').style.display = 'none';
+        document.getElementById('alreadySubmitted').style.display = 'none';
+
+        const container = document.getElementById('questionsContainer');
+        container.innerHTML = '';
+
+        allQuestions.forEach((question, qIndex) => {
+          const questionCard = document.createElement('div');
+          questionCard.className = 'question-card';
+          questionCard.style.marginBottom = '30px';
+          
+          const questionText = question.text || question.question || 'No question text';
+          
+          let imageHtml = '';
+          if (question.image) {
+            imageHtml = `<img src="${question.image}" class="question-image" style="max-width:100%; border-radius:16px; margin:20px 0;">`;
+          }
+          
+          const optionsHtml = question.options.map((option, optIndex) => {
+            const isSelected = answers[qIndex] === optIndex;
+            return `
+              <button class="option-btn ${isSelected ? 'selected' : ''}" 
+                      onclick="selectAnswer(${qIndex}, ${optIndex}, this)"
+                      style="background:${isSelected ? '#8b46ff' : '#f8f9ff'}; color:${isSelected ? 'white' : '#333'};">
+                ${option || `Option ${optIndex + 1}`}
+              </button>
+            `;
+          }).join('');
+
+          questionCard.innerHTML = `
+            <h2 class="question-title">Question ${qIndex + 1}</h2>
+            <p style="font-size:20px; color:#333; margin-bottom:20px;">${questionText}</p>
+            ${imageHtml}
+            <div class="options-grid">${optionsHtml}</div>
+          `;
+          
+          container.appendChild(questionCard);
+        });
+      }
+    }
+
+    function selectAnswer(questionIndex, optionIndex, btnElement) {
+      // Remove selection from other options in this question
+      const questionCard = btnElement.closest('.question-card');
+      questionCard.querySelectorAll('.option-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        btn.style.background = '#f8f9ff';
+        btn.style.color = '#333';
+      });
+      
+      // Select this option
+      btnElement.classList.add('selected');
+      btnElement.style.background = '#8b46ff';
+      btnElement.style.color = 'white';
+      
+      answers[questionIndex] = optionIndex;
+    }
+
+    async function submitAllAnswers() {
+      if (hasSubmitted) {
+        alert('You have already submitted your answers!');
+        return;
+      }
+
+      // Check if all questions are answered
+      const unanswered = [];
+      allQuestions.forEach((q, index) => {
+        if (answers[index] === undefined || answers[index] === null) {
+          unanswered.push(index + 1);
+        }
+      });
+
+      if (unanswered.length > 0) {
+        if (!confirm(`You haven't answered questions: ${unanswered.join(', ')}. Submit anyway?`)) {
+          return;
+        }
+      }
+
+      // Convert answers object to array
+      const answersArray = [];
+      for (let i = 0; i < allQuestions.length; i++) {
+        answersArray[i] = answers[i] !== undefined ? answers[i] : null;
+      }
+
+      try {
+        const token = authToken;
+        const res = await fetch(`/api/quiz/${quizCode}/answer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({
+            answers: answersArray
+          })
+        });
+
+        const data = await res.json();
+        
+        if (data.success) {
+          hasSubmitted = true;
+          const submitBtn = document.getElementById('submitAllBtn');
+          submitBtn.disabled = true;
+          submitBtn.style.opacity = '0.5';
+          submitBtn.textContent = 'Submitted';
+
+          // Show results. If server returned the updated leaderboard, use it
+          // immediately to avoid a subsequent fetch and ensure teacher UI
+          // updates instantly.
+          showResults(data.score, data.leaderboard);
+        } else {
+          alert(data.error || 'Failed to submit answers');
+        }
+      } catch (error) {
+        console.error('Error submitting answers:', error);
+        alert('Failed to submit answers');
+      }
+    }
+
+    async function showResults(score) {
+      document.getElementById('quizContent').style.display = 'none';
+      document.getElementById('results').style.display = 'block';
+      document.getElementById('finalScore').textContent = score || 0;
+
+      try {
+          // If caller provided leaderboard, use it directly
+          let leaderboard = null;
+          if (Array.isArray(arguments[1])) {
+            leaderboard = arguments[1];
+          }
+
+          if (!leaderboard) {
+              const token = authToken;
+              // After a fresh submission we want the absolute latest leaderboard.
+              // Use the nocache flag so server bypasses Redis cache for this request.
+              const res = await fetch(`/api/quiz/${quizCode}/leaderboard?nocache=1`, {
+                headers: {
+                  'Authorization': 'Bearer ' + token
+                }
+              });
+              leaderboard = await res.json();
+          }
+
+          // Display leaderboard
+          const leaderboardEl = document.getElementById('leaderboard');
+          leaderboardEl.innerHTML = `
+            <div class="question-card">
+              <h2 style="margin-bottom:20px;">Leaderboard</h2>
+              ${leaderboard && leaderboard.length > 0 ? leaderboard.map((entry, index) => `
+                <div style="display:flex; justify-content:space-between; padding:15px; background:${index < 3 ? '#f0f2ff' : '#f8f9ff'}; border-radius:12px; margin:10px 0;">
+                  <span><strong>#${index + 1}</strong> ${entry.name}</span>
+                  <span><strong>${entry.score}</strong> points</span>
+                </div>
+              `).join('') : '<p style="text-align:center; color:#666;">No results yet.</p>'}
+            </div>
+          `;
+        } catch (error) {
+          console.error('Error loading results:', error);
+        }
+    }
+
+    // Load quiz on page load
+    window.addEventListener('load', async () => {
+      if (!quizCode) {
+        alert('Invalid quiz code');
+        location.href = 'student-dashboard.html';
+        return;
+      }
+
+      try {
+        const token = authToken;
+
+        // Join quiz via REST first so we can get immediate info whether the
+        // student already submitted. This lets us avoid a race between socket
+        // events and REST state when the page is refreshed.
+        const joinRes = await fetch(`/api/join/quiz`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+          },
+          body: JSON.stringify({ code: quizCode })
+        });
+
+        if (!joinRes.ok) {
+          alert('Quiz not found or closed');
+          location.href = 'student-dashboard.html';
+          return;
+        }
+
+        // Get current user
+        if (!currentUser) {
+          const meRes = await fetch('/api/auth/me', {
+            headers: { 'Authorization': 'Bearer ' + token }
+          });
+          if (meRes.ok) {
+            currentUser = await meRes.json();
+          }
+        }
+
+        // Get quiz data (useful server-side authoritative state)
+        const quizRes = await fetch(`/api/quiz/${quizCode}/data`, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+
+        if (quizRes.ok) {
+          const quizData = await quizRes.json();
+
+          if (!quizData.active) {
+            alert('This quiz has ended');
+            location.href = 'student-dashboard.html';
+            return;
+          }
+
+          // If server says we've already submitted, set local state and show UI
+          if (quizData.hasSubmitted) {
+            hasSubmitted = true;
+            document.getElementById('waiting').style.display = 'none';
+            document.getElementById('quizContent').style.display = 'none';
+            document.getElementById('alreadySubmitted').style.display = 'block';
+            document.getElementById('submittedScore').textContent = quizData.myScore || 0;
+            // Connect socket only so we receive participant/leaderboard updates,
+            // but do NOT allow quiz questions to be displayed again.
+            socket.connect();
+            joinedRoom = true;
+            socket.emit('joinQuizRoom', { code: quizCode, token: authToken });
+            return;
+          }
+
+          // If quiz has started, display all questions
+          if (quizData.currentQuestionIndex >= 0 && quizData.questions && quizData.questions.length > 0) {
+            allQuestions = quizData.questions;
+            document.getElementById('quizTitle').textContent = quizData.title || 'Quiz';
+            displayAllQuestions();
+          }
+        }
+
+        // Now that REST checks are done, connect socket and join the room so we
+        // receive live events. This avoids showing questions before we've
+        // verified submission status.
+        socket.connect();
+        joinedRoom = true;
+        socket.emit('joinQuizRoom', { code: quizCode, token: authToken });
+      } catch (error) {
+        console.error('❌ Error loading quiz:', error);
+        alert('Error loading quiz');
+      }
+    });
+  </script>
+</body>
+</html>
+

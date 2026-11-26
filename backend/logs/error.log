@@ -1,0 +1,17 @@
+{"error":"E11000 duplicate key error collection: livequiz.users index: email_1 dup key: { email: \"example@gmail.com\" }","level":"error","message":"Registration failed","service":"livequiz-plus","timestamp":"2025-11-23T17:45:54.740Z"}
+{"error":"Invalid question index","level":"error","message":"teacherQuestion failed","service":"livequiz-plus","timestamp":"2025-11-24T15:11:46.300Z"}
+{"error":"Invalid question index","level":"error","message":"teacherQuestion failed","service":"livequiz-plus","timestamp":"2025-11-24T15:11:48.138Z"}
+{"error":"Invalid question index","level":"error","message":"teacherQuestion failed","service":"livequiz-plus","timestamp":"2025-11-24T15:12:33.601Z"}
+{"error":"Invalid question index","level":"error","message":"teacherQuestion failed","service":"livequiz-plus","timestamp":"2025-11-24T15:12:47.098Z"}
+{"error":"Invalid question index","level":"error","message":"teacherQuestion failed","service":"livequiz-plus","timestamp":"2025-11-24T15:12:52.146Z"}
+{"error":"Invalid question index","level":"error","message":"teacherQuestion failed","service":"livequiz-plus","timestamp":"2025-11-24T15:12:52.953Z"}
+{"error":"Invalid question index","level":"error","message":"teacherQuestion failed","service":"livequiz-plus","timestamp":"2025-11-24T16:39:46.556Z"}
+{"error":"Invalid question index","level":"error","message":"teacherQuestion failed","service":"livequiz-plus","timestamp":"2025-11-24T23:40:17.684Z"}
+{"error":"broadcastQuestionToRoom is not defined","level":"error","message":"Start quiz error","service":"livequiz-plus","timestamp":"2025-11-25T08:08:43.120Z"}
+{"error":"Cannot read properties of null (reading 'name')","level":"error","message":"Get stats error","service":"livequiz-plus","timestamp":"2025-12-04T17:36:23.281Z"}
+{"error":"Cannot read properties of null (reading 'name')","level":"error","message":"Get stats error","service":"livequiz-plus","timestamp":"2025-12-04T17:36:26.847Z"}
+{"error":"Cannot read properties of null (reading 'name')","level":"error","message":"Get stats error","service":"livequiz-plus","timestamp":"2025-12-04T17:36:31.844Z"}
+{"error":"Class constructor ObjectId cannot be invoked without 'new'","level":"error","message":"Submit answer error","service":"livequiz-plus","timestamp":"2025-12-04T18:44:10.802Z"}
+{"error":"Class constructor ObjectId cannot be invoked without 'new'","level":"error","message":"Submit answer error","service":"livequiz-plus","timestamp":"2025-12-04T18:44:16.967Z"}
+{"error":"Class constructor ObjectId cannot be invoked without 'new'","level":"error","message":"Submit answer error","service":"livequiz-plus","timestamp":"2025-12-04T18:45:02.723Z"}
+{"error":"Expected property name or '}' in JSON at position 2 (line 1 column 3)","level":"error","message":"Quiz creation error","service":"livequiz-plus","timestamp":"2025-12-04T18:50:22.722Z"}

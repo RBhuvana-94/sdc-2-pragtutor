@@ -1,0 +1,168 @@
+FROM tomcat:9-jdk17
+
+COPY target/*.war /usr/local/tomcat/webapps/ROOT.war
+
+EXPOSE 8080
+
+CMD ["catalina.sh", "run"]
+
+------------------------------------------------------------------------
+
+FROM tomcat:9-jdk17
+
+COPY target/*.jar /usr/local/tomcat/webapps/ROOT.war
+
+EXPOSE 8080
+
+CMD ["catalina.sh", "run"]
+
+------------------------------------------------------------------------
+
+pipeline {
+    agent any
+
+    tools {
+        maven 'Maven'
+       
+    }
+
+    stages {
+
+        stage('Git Repo and Clean') {
+            steps {
+                
+                    bat 'git clone https://github.com/username/project.git'
+bat "mvn clean -f project"
+            }
+        }
+
+        
+
+        stage('Install') {
+            steps {
+                bat "mvn install  -f project"
+            }
+        }
+
+        stage('Test') {
+            steps {
+                bat "mvn test -f project"
+            }
+        }
+
+        stage('Package') {
+            steps {
+                bat "mvn package -DskipTests -f project"
+            }
+        }
+    }
+}
+
+-------------------------------------------------------------------------------------
+
+
+
+# Use Ubuntu as base image
+FROM ubuntu:22.04
+
+# Update packages and install Git
+RUN apt-get update && apt-get install -y git
+
+# Set default command
+CMD ["bash"]
+----------------------------------------------------------------------------------
+
+# 1. Pull Nginx image from Docker Hub
+docker pull nginx
+
+# 2. Check downloaded images
+docker images
+
+# 3. Run Nginx container in detached mode
+# 8082 = Host port, 80 = Container port
+docker run -d --name mynginx -p 8082:80 nginx
+
+# 4. Check running containers
+docker ps
+
+# 5. Open Nginx in browser
+# http://localhost:8082
+
+# 6. View container logs
+docker logs mynginx
+
+# 7. Stop Nginx container
+docker stop mynginx
+
+# 8. Start Nginx container again
+docker start mynginx
+
+# 9. Remove Nginx container (must be stopped)
+docker rm mynginx
+
+# 10. Login to Docker Hub
+docker login
+
+# 11. Tag Nginx image with your Docker Hub username
+docker tag nginx rathodbhuvaneshwari/mynginx:v1
+
+# 12. Push image to Docker Hub
+docker push rathodbhuvaneshwari/mynginx:v1
+
+
+----------------------------------------------------------------------------
+
+# 1. Pull Redis image from Docker Hub
+docker pull redis
+
+# 2. Check downloaded images
+docker images
+
+# 3. Run Redis container in detached mode
+# 6379 = Host port and Container port
+docker run -d --name myredis -p 6379:6379 redis
+
+# 4. Check running containers
+docker ps
+
+# 5. Enter Redis CLI in interactive mode
+docker exec -it myredis redis-cli
+
+# 6. Test Redis connection
+PING
+
+# Expected output: PONG
+
+# 7. Store a key-value pair
+SET name "Bhuvana"
+
+# 8. Retrieve the value
+GET name
+
+# Expected output: "Bhuvana"
+
+# 9. Exit Redis CLI
+EXIT
+
+# 10. View Redis container logs
+docker logs myredis
+
+# 11. Stop Redis container
+docker stop myredis
+
+# 12. Start Redis container again
+docker start myredis
+
+# 13. Remove Redis container (must be stopped)
+docker rm myredis
+
+# 14. Login to Docker Hub
+docker login
+
+# 15. Tag Redis image
+docker tag redis rathodbhuvaneshwari/myredis:v1
+
+# 16. Push Redis image to Docker Hub
+docker push rathodbhuvaneshwari/myredis:v1
+
+-----------------------------------------------------------------------------
